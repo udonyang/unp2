@@ -1,12 +1,19 @@
 MAKEFLAGS=ks
 CC = gcc
-CFLAGS = -I unpv22e/lib -Idlib/src -g -O2 -D_REENTRANT
+CFLAGS = -Idlib/src -g -O2  -std=c99\
+				 -D_REENTRANT \
+				 -D_POSIX_SOURCE
 LIBS = -lpthread dlib/src/libdlib.a
 
-main: main.c
+main: dlib main.c 
+
+dlib:
+	make -C dlib/src
 
 run:
-	./main echo
+	#./main echo
+	#./main PipeTest
+	./main FullDuplexPipeTest
 
 %: %.c
 	gcc $(CFLAGS) $< $(LIBS) -o $@

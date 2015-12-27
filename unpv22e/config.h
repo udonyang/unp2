@@ -1,16 +1,16 @@
 /* config.h.  Generated automatically by configure.  */
 /* Define the following if you have the corresponding header */
-#define	CPU_VENDOR_OS "i386-pc-none"
+#define	CPU_VENDOR_OS ""
 
 /* *INDENT-OFF* */
 /* #undef	HAVE_DOOR_H */				/* <door.h> */
-/* #undef	HAVE_MQUEUE_H */				/* <mqueue.h> */
+#define	HAVE_MQUEUE_H 1				/* <mqueue.h> */
 #define	HAVE_POLL_H 1				/* <poll.h> */
 #define	HAVE_PTHREAD_H 1			/* <pthread.h> */
 #define	HAVE_RPC_RPC_H 1			/* <rpc/rpc.h> */
 #define	HAVE_SEMAPHORE_H 1			/* <semaphore.h> */
 #define	HAVE_STRINGS_H 1			/* <strings.h> */
-#define	HAVE_SYS_FILIO_H 1			/* <sys/filio.h> */
+/* #undef	HAVE_SYS_FILIO_H */			/* <sys/filio.h> */
 #define	HAVE_SYS_IOCTL_H 1			/* <sys/ioctl.h> */
 #define	HAVE_SYS_IPC_H 1			/* <sys/ipc.h> */
 #define	HAVE_SYS_MMAN_H 1			/* <sys/mman.h> */
@@ -44,7 +44,7 @@
 /* Define the following if the structure is defined. */
 #define	HAVE_SIGINFO_T_STRUCT 1		/* <signal.h> */
 #define	HAVE_TIMESPEC_STRUCT 1		/* <time.h> */
-#define	HAVE_SEMUN_UNION 1		/* <sys/sem.h> */
+/* #undef	HAVE_SEMUN_UNION */		/* <sys/sem.h> */
 
 /* Devices */
 #define	HAVE_DEV_ZERO 1
@@ -53,9 +53,9 @@
 /* #undef	int8_t */				/* <sys/types.h> */
 /* #undef	int16_t */				/* <sys/types.h> */
 /* #undef	int32_t */				/* <sys/types.h> */
-/* #undef	uint8_t */				/* <sys/types.h> */
-/* #undef	uint16_t */				/* <sys/types.h> */
-/* #undef	uint32_t */				/* <sys/types.h> */
+/*#define	uint8_t unsigned char				* <sys/types.h> */
+/*#define	uint16_t unsigned short				* <sys/types.h> */
+/*#define	uint32_t unsigned int				* <sys/types.h> */
 /* #undef	size_t */				/* <sys/types.h> */
 /* #undef	ssize_t */				/* <sys/types.h> */
 
