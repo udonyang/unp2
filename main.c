@@ -17,6 +17,10 @@
 
 #include "dlib_comm.h"
 
+#define FIFO1 "/tmp/fifo.1"
+#define FIFO2 "/tmp/fifo.2"
+#define FILE_MODE S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH
+
 static int Echo(int argc, char** argv)
 {
   printf("hello dwylkz!\n");
@@ -186,12 +190,190 @@ static int FullDuplexPipeTest(int argc, char** argv)
   return 0;
 }
 
+static int PopenTest(int argc, char** argv)
+{
+  int ret = 0;
+
+  char foo[BUFSIZ];
+  if (fgets(foo, BUFSIZ, stdin) == NULL) return -1;
+  int foo_len = strlen(foo);
+  if (foo[foo_len-1] == '\n') foo_len--;
+
+  char bar[BUFSIZ];
+  snprintf(bar, BUFSIZ, "cat %s", foo);
+
+  FILE* fp = popen(bar, "r");
+  if (fp == NULL) {
+    perror("popen failed");
+    return -1;
+  }
+
+  ssize_t n = 0;
+  while (fgets(foo, BUFSIZ, fp) != NULL) {
+    snprintf(bar, BUFSIZ, "read: %s", foo);
+    if (fputs(bar, stdout) == EOF) {
+      perror("fputs failed");
+      return -1;
+    }
+  }
+
+  if (pclose(fp) == -1) {
+    perror("pclose failed");
+    return -1;
+  }
+
+  return 0;
+}
+
+static int FIFOTest(int argc, char** argv)
+{
+  int ret = 0;
+
+  ret = mkfifo(FIFO1, FILE_MODE);
+  if (ret == -1 && errno != EEXIST) {
+    perror("mkfifo failed");
+    goto err_0;
+  }
+
+  ret = mkfifo(FIFO2, FILE_MODE);
+  if (ret == -1 && errno != EEXIST) {
+    perror("mkfifo failed");
+    goto err_1;
+  }
+
+  pid_t child_pid = fork();
+  if (child_pid == -1) {
+    perror("fork failed");
+    return -1;
+  } else if (child_pid == 0) {
+    int readfd = open(FIFO1, O_RDONLY, 0);
+    if (readfd == -1) {
+      perror("open readfd failed");
+      goto err_2;
+    }
+
+    int writefd= open(FIFO2, O_WRONLY, 0);
+    if (writefd == -1) {
+      perror("open writefd failed");
+      goto err_2;
+    }
+
+    Server(readfd, writefd);
+    return 0;
+  }
+
+  int writefd= open(FIFO1, O_WRONLY, 0);
+  if (writefd == -1) {
+    perror("open writefd failed");
+    goto err_2;
+  }
+
+  int readfd = open(FIFO2, O_RDONLY, 0);
+  if (readfd == -1) {
+    perror("open readfd failed");
+    goto err_2;
+  }
+
+  Client(readfd, writefd);
+  waitpid(child_pid, NULL, 0);
+
+  close(readfd);
+  close(writefd);
+
+  unlink(FIFO2);
+  unlink(FIFO1);
+  return 0;
+
+err_2:
+  unlink(FIFO2);
+err_1:
+  unlink(FIFO1);
+err_0:
+  return -1;
+}
+
+static int FIFOClientTest(int argc, char** argv)
+{
+  int ret = 0;
+
+  int writefd= open(FIFO1, O_WRONLY, 0);
+  if (writefd == -1) {
+    perror("open writefd failed");
+    goto err_2;
+  }
+
+  int readfd = open(FIFO2, O_RDONLY, 0);
+  if (readfd == -1) {
+    perror("open readfd failed");
+    goto err_2;
+  }
+
+  Client(readfd, writefd);
+
+  close(readfd);
+  close(writefd);
+
+  unlink(FIFO2);
+  unlink(FIFO1);
+
+  return 0;
+err_2:
+  unlink(FIFO2);
+err_1:
+  unlink(FIFO1);
+err_0:
+  return -1;
+}
+
+static int FIFOSrvTest(int argc, char** argv)
+{
+  int ret = 0;
+
+  ret = mkfifo(FIFO1, FILE_MODE);
+  if (ret == -1 && errno != EEXIST) {
+    perror("mkfifo failed");
+    goto err_0;
+  }
+
+  ret = mkfifo(FIFO2, FILE_MODE);
+  if (ret == -1 && errno != EEXIST) {
+    perror("mkfifo failed");
+    goto err_1;
+  }
+
+  int readfd = open(FIFO1, O_RDONLY, 0);
+  if (readfd == -1) {
+    perror("open readfd failed");
+    goto err_2;
+  }
+
+  int writefd= open(FIFO2, O_WRONLY, 0);
+  if (writefd == -1) {
+    perror("open writefd failed");
+    goto err_2;
+  }
+
+  Server(readfd, writefd);
+
+  return 0;
+err_2:
+  unlink(FIFO2);
+err_1:
+  unlink(FIFO1);
+err_0:
+  return -1;
+}
+
 int main(int argc, char** argv)
 {
   const dlib_cmd_t cmds[] = {
     DLIB_CMD_DEFINE(Echo, ""),
     DLIB_CMD_DEFINE(PipeTest, ""),
     DLIB_CMD_DEFINE(FullDuplexPipeTest, ""),
+    DLIB_CMD_DEFINE(PopenTest, ""),
+    DLIB_CMD_DEFINE(FIFOTest, ""),
+    DLIB_CMD_DEFINE(FIFOClientTest, ""),
+    DLIB_CMD_DEFINE(FIFOSrvTest, ""),
     DLIB_CMD_NULL
   };
   return dlib_subcmd(argc, argv, cmds);
