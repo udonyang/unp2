@@ -17,10 +17,12 @@ run:
 	#./main FullDuplexPipeTest
 	#./main PopenTest
 	#./main FIFOTest
-	./main FIFOClientTest
+	#./main FIFOClientTest
+	./main FIFOMultiCliTest
 
 fifosrv:
-	./main FIFOSrvTest
+	#./main FIFOSrvTest
+	./main FIFOMultiSrvTest
 
 %: %.c
 	gcc $(CFLAGS) $< $(LIBS) -o $@
