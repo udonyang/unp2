@@ -417,11 +417,13 @@ static int FIFOMultiSrvTest(int argc, char** argv)
     }
     *space_pos = '\0';
     const char* fifo_name = foo;
+    puts("before open");
     int writefd = open(foo, O_WRONLY, 0);
     if (writefd == -1) {
       perror("open write failed");
       continue;
     }
+    puts("after open");
 
     const char* file_name = space_pos+1;
     int filefd = open(file_name, O_RDONLY);
