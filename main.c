@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
+#include <stdint.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -22,6 +24,45 @@
 #define FIFO1 FIFOPRE".1"
 #define FIFO2 FIFOPRE".2"
 #define FILE_MODE S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH
+
+#define MESSAGE_DATA_SIZE (PIPE_BUF-sizeof(uint32_t)*2)
+#define MESSAGE_HEAD_SIZE (sizeof(Message)-MESSAGE_DATA_SIZE)
+#define MESSAGE_ERR_OK 0
+#define MESSAGE_ERR_SEND 1
+#define MESSAGE_ERR_READ_HEAD 2
+#define MESSAGE_ERR_READ_DATA 3
+typedef struct Message
+{
+  uint32_t len;
+  uint32_t type;
+  char data[MESSAGE_DATA_SIZE];
+} Message;
+int MessageSend(Message* message, int fd)
+{
+  ssize_t total = MESSAGE_HEAD_SIZE+message->len;
+  ssize_t sendbytes = dlib_so_write(fd, message, total);
+  if (sendbytes != total) {
+    DLIB_ERR("dlib_so_write failed: total=%ld send=%ld", total, sendbytes);
+    return MESSAGE_ERR_SEND;
+  }
+  return MESSAGE_ERR_OK;
+}
+int MessageRecv(Message* message, int fd)
+{
+  ssize_t recvbytes = dlib_so_read(fd, message, MESSAGE_HEAD_SIZE);
+  if (recvbytes == 0) return MESSAGE_ERR_OK;
+  if (recvbytes != MESSAGE_HEAD_SIZE) {
+    DLIB_ERR("dlib_so_read failed: headsize=%ld recv=%ld", MESSAGE_HEAD_SIZE, recvbytes);
+    return MESSAGE_ERR_READ_HEAD;
+  }
+  if (message->len == 0) return 0;
+  recvbytes = dlib_so_read(fd, message+MESSAGE_HEAD_SIZE, message->len);
+  if (recvbytes != message->len) {
+    DLIB_ERR("dlib_so_read failed: datalen=%u recv=%ld", message->len, recvbytes);
+    return MESSAGE_ERR_READ_DATA;
+  }
+  return MESSAGE_ERR_OK;
+}
 
 void Server(int fd_read, int fd_write)
 {
@@ -85,7 +126,10 @@ void Client(int fd_read, int fd_write)
 
 static int Echo(int argc, char** argv)
 {
-  printf("hello dwylkz!\n");
+  DLIB_INFO("hello dwylkz!");
+  DLIB_INFO("%d", BUFSIZ);
+  DLIB_INFO("%d", EOF);
+  DLIB_INFO("%d", PIPE_BUF);
   return 0;
 }
 
@@ -405,41 +449,45 @@ static int FIFOMultiSrvTest(int argc, char** argv)
     goto err_2;
   }
 
-  char foo[BUFSIZ];
-  char bar[BUFSIZ];
+  char fromcli[BUFSIZ];
   ssize_t n = 0;
-  while ((n = read(readfd, foo, BUFSIZ)) > 0) {
-    if (foo[n-1] == '\n') foo[n-1] = '\0';
-    char* space_pos = strchr(foo, ' ');
+  while ((n = dlib_so_read(readfd, fromcli, BUFSIZ)) > 0) {
+    if (fromcli[n-1] == '\n') fromcli[n-1] = '\0';
+    DLIB_INFO("fromcli=(%s)", fromcli);
+    char* space_pos = strchr(fromcli, ' ');
     if (space_pos == NULL) {
       perror("invalid format");
       continue;
     }
     *space_pos = '\0';
-    const char* fifo_name = foo;
-    puts("before open");
-    int writefd = open(foo, O_WRONLY, 0);
+    const char* fifo_name = fromcli;
+    DLIB_INFO("before open: fifo_name=(%s)", fifo_name);
+    int writefd = open(fifo_name, O_WRONLY, 0);
     if (writefd == -1) {
       perror("open write failed");
       continue;
     }
-    puts("after open");
+    DLIB_INFO("after open");
 
     const char* file_name = space_pos+1;
+    DLIB_INFO("file_name=(%s)", file_name);
     int filefd = open(file_name, O_RDONLY);
     if (filefd == -1) {
-      snprintf(bar, BUFSIZ, "%d: open file failed: filename=(%s) msg=(%s)\n", errno,
+      char errbuf[BUFSIZ];
+      snprintf(errbuf, BUFSIZ, "%d: open file failed: filename=(%s) msg=(%s)\n", errno,
                file_name,
                strerror(errno));
-      if (write(writefd, bar, strlen(bar)) == -1) {
+      DLIB_ERR("%s", errbuf);
+      if (write(writefd, errbuf, strlen(errbuf)) == -1) {
         perror("write failed");
       }
       close(writefd);
       continue;
     }
 
-    while ((n = read(filefd, foo, BUFSIZ)) > 0) {
-      if (write(writefd, foo, n) == -1) {
+    char filebuf[BUFSIZ] = {0};
+    while ((n = read(filefd, filebuf, BUFSIZ)) > 0) {
+      if (dlib_so_write(writefd, filebuf, n) == -1) {
         perror("write failed");
         continue;
       }
@@ -479,11 +527,15 @@ static int FIFOMultiCliTest(int argc, char** argv)
     goto err_1;
   }
 
-  char foo[BUFSIZ];
-  if (fgets(foo, BUFSIZ, stdin) == NULL) goto err_1;
+  char filepath[BUFSIZ] = {0};
+  if (argc > 1) {
+    snprintf(filepath, BUFSIZ, "%s\n", argv[1]);
+  } else if (fgets(filepath, BUFSIZ, stdin) == NULL) {
+    goto err_1;
+  }
 
   char bar[BUFSIZ];
-  snprintf(bar, BUFSIZ, "%s %s", fifoname, foo);
+  snprintf(bar, BUFSIZ, "%s %s", fifoname, filepath);
 
   if (write(writefd, bar, strlen(bar)) == -1) {
     perror("write failed");
@@ -496,10 +548,11 @@ static int FIFOMultiCliTest(int argc, char** argv)
     goto err_1;
   }
 
+  char filebuf[BUFSIZ] = {0};
   ssize_t n = 0;
-  while ((n = read(readfd, foo, BUFSIZ)) > 0) {
-    if (write(fileno(stdout), foo, n) == -1) {
-      perror("write to stdout failed");
+  while ((n = dlib_so_read(readfd, filebuf, BUFSIZ)) > 0) {
+    if (dlib_so_write(fileno(stdout), filebuf, n) == -1) {
+      DLIB_ERR("write to stdout failed");
     }
   }
 
@@ -511,6 +564,11 @@ err_1:
   unlink(fifoname);
 err_0:
   return -1;
+}
+
+static int MultiFIFOMultiCliTest(int argc, char** argv)
+{
+  return dlib_subcmd_mutiplex(argc, argv, FIFOMultiCliTest);
 }
 
 int main(int argc, char** argv)
@@ -525,6 +583,7 @@ int main(int argc, char** argv)
     DLIB_CMD_DEFINE(FIFOSrvTest, ""),
     DLIB_CMD_DEFINE(FIFOMultiSrvTest, ""),
     DLIB_CMD_DEFINE(FIFOMultiCliTest, ""),
+    DLIB_CMD_DEFINE(MultiFIFOMultiCliTest, ""),
     DLIB_CMD_NULL
   };
   return dlib_subcmd(argc, argv, cmds);
